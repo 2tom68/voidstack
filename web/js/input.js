@@ -71,6 +71,9 @@ export class InputController {
           this._selectAbsolute?.(col);
         } else if (dy < -40 && Math.abs(dy) > Math.abs(dx)) {
           this.onPush();
+        } else if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+          if (dx < 0) this.onLeft();
+          else this.onRight();
         }
         this._touchStart = null;
       },

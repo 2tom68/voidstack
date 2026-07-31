@@ -170,12 +170,15 @@ export class VoidStackRenderer {
     return h * 0.62;
   }
 
+  /** Builds a stack's meshes centered vertically on the group origin (needed so a 180° edge-flip lands correctly). */
   _makeStackMesh(stack) {
     const group = new THREE.Group();
     const color = stack.marked ? MARKED_COLOR : SAFE_COLOR;
+    const size = 0.94 * CELL;
+    const cubeH = 0.58;
+    const gap = 0.03;
+    const totalH = stack.height * cubeH + (stack.height - 1) * gap;
     for (let i = 0; i < stack.height; i++) {
-      const size = 0.94 * CELL;
-      const cubeH = 0.58;
       const geo = new THREE.BoxGeometry(size, cubeH, size);
       const mat = new THREE.MeshStandardMaterial({
         color: stack.marked ? 0x220a14 : 0x0a1622,
@@ -185,7 +188,7 @@ export class VoidStackRenderer {
         metalness: 0.2,
       });
       const cube = new THREE.Mesh(geo, mat);
-      cube.position.y = i * (cubeH + 0.03) + cubeH / 2;
+      cube.position.y = i * (cubeH + gap) + cubeH / 2 - totalH / 2;
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
         new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })
@@ -194,33 +197,35 @@ export class VoidStackRenderer {
       group.add(cube);
     }
     this.scene.add(group);
-    return group;
+    return { group, restY: totalH / 2 };
   }
 
   /** Creates a stack instantly at its spawn cell (no animation). */
   spawnStack(stack) {
     if (this.stackVisuals.has(stack.id)) return;
-    const group = this._makeStackMesh(stack);
-    const pos = new THREE.Vector3(colToX(stack.col), 0, rowToZ(stack.row));
+    const { group, restY } = this._makeStackMesh(stack);
+    const pos = new THREE.Vector3(colToX(stack.col), restY, rowToZ(stack.row));
     group.position.copy(pos);
-    this.stackVisuals.set(stack.id, { group, pos, rotX: 0, marked: stack.marked, roll: null });
+    this.stackVisuals.set(stack.id, { group, pos, restY, rotX: 0, marked: stack.marked, roll: null });
   }
 
-  /** Rolls (tumbles) a stack one cell forward to its new row — no gliding, a discrete pivot roll per tick. */
+  /**
+   * Rolls (tumbles) a stack one cell forward to its new row by pivoting a full
+   * 180° around the leading bottom edge — an exact, self-consistent edge-roll
+   * (not an approximated glide+spin), so it always lands flush on the next
+   * cell with no drift, regardless of stack height.
+   */
   rollStack(stack) {
     const visual = this.stackVisuals.get(stack.id);
     if (!visual) {
       this.spawnStack(stack);
       return;
     }
-    const toPos = new THREE.Vector3(colToX(stack.col), 0, rowToZ(stack.row));
     visual.roll = {
       fromPos: visual.pos.clone(),
-      toPos,
       fromRot: visual.rotX,
-      toRot: visual.rotX - Math.PI / 2,
       elapsed: 0,
-      duration: 0.22,
+      duration: 0.24,
     };
   }
 
@@ -301,16 +306,19 @@ export class VoidStackRenderer {
         r.elapsed += dt;
         const t = Math.min(1, r.elapsed / r.duration);
         const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        const hop = Math.sin(Math.PI * t) * 0.22;
-        group.position.x = r.fromPos.x + (r.toPos.x - r.fromPos.x) * eased;
-        group.position.z = r.fromPos.z + (r.toPos.z - r.fromPos.z) * eased;
-        group.position.y = r.fromPos.y + (r.toPos.y - r.fromPos.y) * eased + hop;
-        group.rotation.x = r.fromRot + (r.toRot - r.fromRot) * eased;
+        const theta = eased * Math.PI;
+        // Edge-pivot roll: the leading bottom edge (fromPos.z + CELL/2, at floor level)
+        // stays fixed; position falls out of the same rotation instead of a separate lerp.
+        const arm = CELL / 2;
+        group.position.x = r.fromPos.x;
+        group.position.y = visual.restY + arm * Math.sin(theta);
+        group.position.z = r.fromPos.z + arm * (1 - Math.cos(theta));
+        group.rotation.x = r.fromRot + theta;
         if (t >= 1) {
-          visual.pos.copy(r.toPos);
-          visual.rotX = r.toRot;
-          group.position.copy(r.toPos);
-          group.rotation.x = r.toRot;
+          visual.pos.set(r.fromPos.x, visual.restY, r.fromPos.z + CELL);
+          visual.rotX = r.fromRot + Math.PI;
+          group.position.copy(visual.pos);
+          group.rotation.x = visual.rotX;
           visual.roll = null;
         }
       }

@@ -14,22 +14,22 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
 
     private struct RollAnimation {
         let fromPos: SCNVector3
-        let toPos: SCNVector3
         let fromRot: Float
-        let toRot: Float
         var elapsed: Float = 0
-        let duration: Float = 0.22
+        let duration: Float = 0.24
     }
 
     private final class StackVisual {
         let node: SCNNode
         var pos: SCNVector3
+        var restY: Float
         var rotX: Float = 0
         let marked: Bool
         var roll: RollAnimation?
-        init(node: SCNNode, pos: SCNVector3, marked: Bool) {
+        init(node: SCNNode, pos: SCNVector3, restY: Float, marked: Bool) {
             self.node = node
             self.pos = pos
+            self.restY = restY
             self.marked = marked
         }
     }
@@ -177,26 +177,22 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
     /// Creates a stack instantly at its spawn cell (no animation).
     func spawnStack(_ stack: Stack) {
         guard stackNodes[stack.id] == nil else { return }
-        let node = makeStackNode(stack)
-        let pos = SCNVector3(Self.colToX(stack.col), 0, Self.rowToZ(stack.row))
+        let (node, restY) = makeStackNode(stack)
+        let pos = SCNVector3(Self.colToX(stack.col), restY, Self.rowToZ(stack.row))
         node.position = pos
         scene.rootNode.addChildNode(node)
-        stackNodes[stack.id] = StackVisual(node: node, pos: pos, marked: stack.marked)
+        stackNodes[stack.id] = StackVisual(node: node, pos: pos, restY: restY, marked: stack.marked)
     }
 
-    /// Rolls (tumbles) a stack one cell forward to its new row — no gliding, a discrete pivot roll per tick.
+    /// Rolls (tumbles) a stack one cell forward by pivoting a full 180° around the leading
+    /// bottom edge — an exact edge-roll (position falls out of the rotation, not a separate
+    /// lerp), so it always lands flush on the next cell with no drift, at any stack height.
     func rollStack(_ stack: Stack) {
         guard let visual = stackNodes[stack.id] else {
             spawnStack(stack)
             return
         }
-        let toPos = SCNVector3(Self.colToX(stack.col), 0, Self.rowToZ(stack.row))
-        visual.roll = RollAnimation(
-            fromPos: visual.pos,
-            toPos: toPos,
-            fromRot: visual.rotX,
-            toRot: visual.rotX - .pi / 2
-        )
+        visual.roll = RollAnimation(fromPos: visual.pos, fromRot: visual.rotX)
     }
 
     func removeStack(id: Int) {
@@ -210,13 +206,16 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
         stackNodes.removeAll()
     }
 
-    private func makeStackNode(_ stack: Stack) -> SCNNode {
+    /// Builds a stack centered vertically on the node origin (needed so a 180° edge-flip lands correctly).
+    private func makeStackNode(_ stack: Stack) -> (node: SCNNode, restY: Float) {
         let group = SCNNode()
         let color = stack.marked ? VoidStackColor.marked : VoidStackColor.safe
-        let cubeH: CGFloat = 0.58
+        let cubeH: Float = 0.58
+        let gap: Float = 0.03
+        let totalH = Float(stack.height) * cubeH + Float(stack.height - 1) * gap
         for i in 0..<stack.height {
             let size = CGFloat(0.94 * Self.cell)
-            let box = SCNBox(width: size, height: cubeH, length: size, chamferRadius: 0.04)
+            let box = SCNBox(width: size, height: CGFloat(cubeH), length: size, chamferRadius: 0.04)
             let mat = SCNMaterial()
             mat.lightingModel = .physicallyBased
             mat.diffuse.contents = stack.marked
@@ -228,10 +227,10 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
             mat.metalness.contents = 0.2
             box.materials = [mat]
             let cube = SCNNode(geometry: box)
-            cube.position = SCNVector3(0, Float(i) * Float(cubeH + 0.03) + Float(cubeH) / 2, 0)
+            cube.position = SCNVector3(0, Float(i) * (cubeH + gap) + cubeH / 2 - totalH / 2, 0)
             group.addChildNode(cube)
         }
-        return group
+        return (group, totalH / 2)
     }
 
     func setSelected(_ col: Int) {
@@ -291,18 +290,21 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
                 roll.elapsed += Float(dt)
                 let t = min(1, roll.elapsed / roll.duration)
                 let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
-                let hop = sin(Float.pi * t) * 0.22
+                let theta = eased * Float.pi
+                // Edge-pivot roll: the leading bottom edge (fromPos.z + cell/2, at floor level)
+                // stays fixed; position falls out of the same rotation instead of a separate lerp.
+                let arm = Self.cell / 2
                 node.position = SCNVector3(
-                    roll.fromPos.x + (roll.toPos.x - roll.fromPos.x) * eased,
-                    roll.fromPos.y + (roll.toPos.y - roll.fromPos.y) * eased + hop,
-                    roll.fromPos.z + (roll.toPos.z - roll.fromPos.z) * eased
+                    roll.fromPos.x,
+                    visual.restY + arm * sin(theta),
+                    roll.fromPos.z + arm * (1 - cos(theta))
                 )
-                node.eulerAngles.x = roll.fromRot + (roll.toRot - roll.fromRot) * eased
+                node.eulerAngles.x = roll.fromRot + theta
                 if t >= 1 {
-                    visual.pos = roll.toPos
-                    visual.rotX = roll.toRot
-                    node.position = roll.toPos
-                    node.eulerAngles.x = roll.toRot
+                    visual.pos = SCNVector3(roll.fromPos.x, visual.restY, roll.fromPos.z + Self.cell)
+                    visual.rotX = roll.fromRot + .pi
+                    node.position = visual.pos
+                    node.eulerAngles.x = visual.rotX
                     visual.roll = nil
                 } else {
                     visual.roll = roll

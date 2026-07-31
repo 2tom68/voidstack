@@ -8,7 +8,11 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            GameSceneView(coordinator: controller.scene)
+            GameSceneView(
+                coordinator: controller.scene,
+                onSwipeLeft: controller.selectLeft,
+                onSwipeRight: controller.selectRight
+            )
                 .ignoresSafeArea()
 
             if controller.screen == .playing || controller.screen == .paused {
