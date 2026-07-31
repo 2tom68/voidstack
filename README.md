@@ -11,6 +11,16 @@ von und keine Zugehörigkeit zu Sony Interactive Entertainment.** Kein
 Originalcode, keine Originalgrafik, keine Originalmusik und kein
 Original-Branding dieser Titel wurde verwendet.
 
+**Live-Demo (Browser/PWA):** **[2tom68.github.io/voidstack](https://2tom68.github.io/voidstack/)**
+— läuft direkt im Browser, auf iPhone/iPad per Safari installierbar.
+
+## Screenshots
+
+| iPhone | iPad |
+| --- | --- |
+| ![iPhone Menü](ios/design/iphone-menu.png) | ![iPad Gameplay](ios/design/ipad-gameplay-1.png) |
+| ![iPhone Gameplay](ios/design/iphone-gameplay-2.png) | ![iPad Gameplay Gefahr](ios/design/ipad-gameplay-2.png) |
+
 ## Struktur
 
 ```
