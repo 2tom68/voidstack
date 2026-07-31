@@ -96,6 +96,27 @@ export class AudioEngine {
     this._tone({ freq: 720, type: 'triangle', t0, dur: 0.06, dest: this.sfxGain, gain: 0.18 });
   }
 
+  /** Loud impact "thud" for each roll step of a tumbling stack. */
+  playRoll() {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const base = 90 + Math.random() * 30;
+    this._tone({ freq: base, type: 'square', t0, dur: 0.16, dest: this.sfxGain, gain: 0.55, glideTo: base * 0.5, filterFreq: 700 });
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1800;
+    const g = this.ctx.createGain();
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.sfxGain);
+    this._env(g, t0, 0.001, 0.03, 0.15, 0.09, 0.5);
+    src.start(t0);
+    src.stop(t0 + 0.2);
+  }
+
   playClearMarked(combo = 0) {
     if (!this.ctx) return;
     const t0 = this.ctx.currentTime;

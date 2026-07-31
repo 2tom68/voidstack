@@ -165,6 +165,13 @@ final class AudioEngine {
         tone(freq: 720, wave: .triangle, dur: 0.06, peak: 0.18)
     }
 
+    /// Loud impact "thud" for each roll step of a tumbling stack.
+    func playRoll() {
+        let base = 90.0 + Double.random(in: 0...30)
+        tone(freq: base, wave: .square, dur: 0.16, peak: 0.55, glideTo: base * 0.5, filter: 700)
+        addVoice(Voice(wave: .noise, freq: 0, attack: 0.001, decay: 0.03, sustainLevel: 0.15, release: 0.09, peak: 0.5, filterCutoffHz: 1800))
+    }
+
     func playClearMarked(combo: Int) {
         let base = 440.0 + Double(min(combo, 8)) * 60
         for (i, interval) in [0.0, 4, 7, 12].enumerated() {

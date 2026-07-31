@@ -40,7 +40,7 @@ export class VoidStackRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.clock = new THREE.Clock();
-    this.stackMeshes = new Map(); // stack id -> group
+    this.stackVisuals = new Map(); // stack id -> { group, pos, rotX, marked, roll }
     this.particles = [];
     this.shakeTime = 0;
     this.shakeAmp = 0;
@@ -193,32 +193,46 @@ export class VoidStackRenderer {
       cube.add(edges);
       group.add(cube);
     }
-    group.position.set(colToX(stack.col), 0, rowToZ(stack.row));
-    group.userData.marked = stack.marked;
     this.scene.add(group);
     return group;
   }
 
-  syncStacks(stacks) {
-    const seen = new Set();
-    for (const stack of stacks) {
-      seen.add(stack.id);
-      let group = this.stackMeshes.get(stack.id);
-      if (!group) {
-        group = this._makeStackMesh(stack);
-        this.stackMeshes.set(stack.id, group);
-      }
-      const targetX = colToX(stack.col);
-      const targetZ = rowToZ(stack.row);
-      group.userData.targetX = targetX;
-      group.userData.targetZ = targetZ;
+  /** Creates a stack instantly at its spawn cell (no animation). */
+  spawnStack(stack) {
+    if (this.stackVisuals.has(stack.id)) return;
+    const group = this._makeStackMesh(stack);
+    const pos = new THREE.Vector3(colToX(stack.col), 0, rowToZ(stack.row));
+    group.position.copy(pos);
+    this.stackVisuals.set(stack.id, { group, pos, rotX: 0, marked: stack.marked, roll: null });
+  }
+
+  /** Rolls (tumbles) a stack one cell forward to its new row — no gliding, a discrete pivot roll per tick. */
+  rollStack(stack) {
+    const visual = this.stackVisuals.get(stack.id);
+    if (!visual) {
+      this.spawnStack(stack);
+      return;
     }
-    for (const [id, group] of [...this.stackMeshes.entries()]) {
-      if (!seen.has(id)) {
-        this._disposeGroup(group);
-        this.stackMeshes.delete(id);
-      }
-    }
+    const toPos = new THREE.Vector3(colToX(stack.col), 0, rowToZ(stack.row));
+    visual.roll = {
+      fromPos: visual.pos.clone(),
+      toPos,
+      fromRot: visual.rotX,
+      toRot: visual.rotX - Math.PI / 2,
+      elapsed: 0,
+      duration: 0.22,
+    };
+  }
+
+  removeStack(id) {
+    const visual = this.stackVisuals.get(id);
+    if (!visual) return;
+    this._disposeGroup(visual.group);
+    this.stackVisuals.delete(id);
+  }
+
+  clearStacks() {
+    for (const id of [...this.stackVisuals.keys()]) this.removeStack(id);
   }
 
   _disposeGroup(group) {
@@ -280,11 +294,27 @@ export class VoidStackRenderer {
   update(dt) {
     this._time += dt;
 
-    for (const [, group] of this.stackMeshes) {
-      const t = Math.min(1, dt * 10);
-      group.position.x += (group.userData.targetX - group.position.x) * t;
-      group.position.z += (group.userData.targetZ - group.position.z) * t;
-      if (group.userData.marked) {
+    for (const visual of this.stackVisuals.values()) {
+      const group = visual.group;
+      if (visual.roll) {
+        const r = visual.roll;
+        r.elapsed += dt;
+        const t = Math.min(1, r.elapsed / r.duration);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const hop = Math.sin(Math.PI * t) * 0.22;
+        group.position.x = r.fromPos.x + (r.toPos.x - r.fromPos.x) * eased;
+        group.position.z = r.fromPos.z + (r.toPos.z - r.fromPos.z) * eased;
+        group.position.y = r.fromPos.y + (r.toPos.y - r.fromPos.y) * eased + hop;
+        group.rotation.x = r.fromRot + (r.toRot - r.fromRot) * eased;
+        if (t >= 1) {
+          visual.pos.copy(r.toPos);
+          visual.rotX = r.toRot;
+          group.position.copy(r.toPos);
+          group.rotation.x = r.toRot;
+          visual.roll = null;
+        }
+      }
+      if (visual.marked) {
         const pulse = 0.75 + Math.sin(this._time * 6) * 0.35;
         group.children.forEach((cube) => {
           if (cube.material) cube.material.emissiveIntensity = pulse;

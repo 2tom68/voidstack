@@ -29,17 +29,26 @@ game.on('levelUp', (v) => {
   ui.setLevel(v);
   audio.playLevelUp();
 });
+game.on('spawn', (stack) => renderer.spawnStack(stack));
+game.on('advance', (stack) => {
+  renderer.rollStack(stack);
+  audio.playRoll();
+});
 game.on('clearedMarked', ({ stack, combo }) => {
+  renderer.removeStack(stack.id);
   renderer.burst(stack.col, stack.row, true);
   audio.playClearMarked(combo);
 });
-game.on('pushedSafe', () => {
+game.on('pushedSafe', (stack) => {
+  renderer.removeStack(stack.id);
   audio.playPushFail();
   renderer.shake(0.28, 0.3);
 });
+game.on('passedSafe', (stack) => renderer.removeStack(stack.id));
 game.on('lifeLost', ({ reason, stack }) => {
   ui.renderLives(game.lives);
   if (reason === 'escaped') {
+    renderer.removeStack(stack.id);
     renderer.burst(stack.col, 0, true);
     audio.playEscapeAlarm();
     renderer.shake(0.45, 0.4);
@@ -55,6 +64,7 @@ game.on('gameOver', ({ score }) => {
   setState('gameover');
 });
 game.on('reset', () => {
+  renderer.clearStacks();
   ui.setScore(0);
   ui.setCombo(0);
   ui.setLevel(1);
@@ -128,7 +138,6 @@ function frame(now) {
     game.update(dt * 1000);
     ui.setWarning(game.dangerCols.length > 0);
     renderer.setWarningCols(game.dangerCols);
-    renderer.syncStacks(game.snapshot().stacks);
   }
   renderer.update(dt);
   requestAnimationFrame(frame);

@@ -33,24 +33,33 @@ final class GameController: ObservableObject {
         dangerCols = game.dangerCols
         scene.setDangerCols(dangerCols)
         scene.setSelected(game.selectedCol)
-        scene.syncStacks(game.stacks)
     }
 
     private func handle(_ event: GameEvent) {
         switch event {
         case .selected(let col):
             scene.setSelected(col)
+        case .spawned(let stack):
+            scene.spawnStack(stack)
+        case .advanced(let stack):
+            scene.rollStack(stack)
+            audio.playRoll()
         case .clearedMarked(let stack, _, let combo):
+            scene.removeStack(id: stack.id)
             scene.burst(col: stack.col, row: stack.row, marked: true)
             audio.playClearMarked(combo: combo)
-        case .pushedSafe:
+        case .pushedSafe(let stack):
+            scene.removeStack(id: stack.id)
             audio.playPushFail()
             scene.shake(amp: 0.28, duration: 0.3)
         case .pushEmpty:
             audio.playSelect()
+        case .passedSafe(let stack):
+            scene.removeStack(id: stack.id)
         case .lifeLost(let reason, let stack, _):
             scene.shake(amp: 0.45, duration: 0.4)
             if reason == .escaped, let stack {
+                scene.removeStack(id: stack.id)
                 scene.burst(col: stack.col, row: 0, marked: true)
                 audio.playEscapeAlarm()
             }
@@ -60,7 +69,7 @@ final class GameController: ObservableObject {
             audio.playGameOver()
             audio.stopAmbient()
             screen = .gameOver
-        case .reset, .started, .spawned, .advanced, .passedSafe:
+        case .reset, .started:
             break
         }
     }
@@ -68,6 +77,7 @@ final class GameController: ObservableObject {
     func startGame() {
         audio.resume()
         audio.startAmbient()
+        scene.clearStacks()
         game.reset()
         game.start()
         screen = .playing

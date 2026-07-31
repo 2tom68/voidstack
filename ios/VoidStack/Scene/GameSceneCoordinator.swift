@@ -12,15 +12,24 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
     private var reticleNode: SCNNode!
     private var dotTexture = VoidStackTextures.softDot()
 
+    private struct RollAnimation {
+        let fromPos: SCNVector3
+        let toPos: SCNVector3
+        let fromRot: Float
+        let toRot: Float
+        var elapsed: Float = 0
+        let duration: Float = 0.22
+    }
+
     private final class StackVisual {
         let node: SCNNode
-        var targetX: Float
-        var targetZ: Float
+        var pos: SCNVector3
+        var rotX: Float = 0
         let marked: Bool
-        init(node: SCNNode, targetX: Float, targetZ: Float, marked: Bool) {
+        var roll: RollAnimation?
+        init(node: SCNNode, pos: SCNVector3, marked: Bool) {
             self.node = node
-            self.targetX = targetX
-            self.targetZ = targetZ
+            self.pos = pos
             self.marked = marked
         }
     }
@@ -165,27 +174,40 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
 
     // MARK: - Sync from GameEngine
 
-    func syncStacks(_ stacks: [Stack]) {
-        var seen = Set<Int>()
-        for stack in stacks {
-            seen.insert(stack.id)
-            if let visual = stackNodes[stack.id] {
-                visual.targetX = Self.colToX(stack.col)
-                visual.targetZ = Self.rowToZ(stack.row)
-            } else {
-                let node = makeStackNode(stack)
-                stackNodes[stack.id] = StackVisual(
-                    node: node,
-                    targetX: Self.colToX(stack.col),
-                    targetZ: Self.rowToZ(stack.row),
-                    marked: stack.marked
-                )
-            }
+    /// Creates a stack instantly at its spawn cell (no animation).
+    func spawnStack(_ stack: Stack) {
+        guard stackNodes[stack.id] == nil else { return }
+        let node = makeStackNode(stack)
+        let pos = SCNVector3(Self.colToX(stack.col), 0, Self.rowToZ(stack.row))
+        node.position = pos
+        scene.rootNode.addChildNode(node)
+        stackNodes[stack.id] = StackVisual(node: node, pos: pos, marked: stack.marked)
+    }
+
+    /// Rolls (tumbles) a stack one cell forward to its new row — no gliding, a discrete pivot roll per tick.
+    func rollStack(_ stack: Stack) {
+        guard let visual = stackNodes[stack.id] else {
+            spawnStack(stack)
+            return
         }
-        for (id, visual) in stackNodes where !seen.contains(id) {
-            visual.node.removeFromParentNode()
-            stackNodes.removeValue(forKey: id)
-        }
+        let toPos = SCNVector3(Self.colToX(stack.col), 0, Self.rowToZ(stack.row))
+        visual.roll = RollAnimation(
+            fromPos: visual.pos,
+            toPos: toPos,
+            fromRot: visual.rotX,
+            toRot: visual.rotX - .pi / 2
+        )
+    }
+
+    func removeStack(id: Int) {
+        guard let visual = stackNodes[id] else { return }
+        visual.node.removeFromParentNode()
+        stackNodes.removeValue(forKey: id)
+    }
+
+    func clearStacks() {
+        for (_, visual) in stackNodes { visual.node.removeFromParentNode() }
+        stackNodes.removeAll()
     }
 
     private func makeStackNode(_ stack: Stack) -> SCNNode {
@@ -209,8 +231,6 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
             cube.position = SCNVector3(0, Float(i) * Float(cubeH + 0.03) + Float(cubeH) / 2, 0)
             group.addChildNode(cube)
         }
-        group.position = SCNVector3(Self.colToX(stack.col), 0, Self.rowToZ(stack.row))
-        scene.rootNode.addChildNode(group)
         return group
     }
 
@@ -267,9 +287,27 @@ final class GameSceneCoordinator: NSObject, SCNSceneRendererDelegate {
 
         for (_, visual) in stackNodes {
             let node = visual.node
-            let t: Float = min(1, Float(dt) * 10)
-            node.position.x += (visual.targetX - node.position.x) * t
-            node.position.z += (visual.targetZ - node.position.z) * t
+            if var roll = visual.roll {
+                roll.elapsed += Float(dt)
+                let t = min(1, roll.elapsed / roll.duration)
+                let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+                let hop = sin(Float.pi * t) * 0.22
+                node.position = SCNVector3(
+                    roll.fromPos.x + (roll.toPos.x - roll.fromPos.x) * eased,
+                    roll.fromPos.y + (roll.toPos.y - roll.fromPos.y) * eased + hop,
+                    roll.fromPos.z + (roll.toPos.z - roll.fromPos.z) * eased
+                )
+                node.eulerAngles.x = roll.fromRot + (roll.toRot - roll.fromRot) * eased
+                if t >= 1 {
+                    visual.pos = roll.toPos
+                    visual.rotX = roll.toRot
+                    node.position = roll.toPos
+                    node.eulerAngles.x = roll.toRot
+                    visual.roll = nil
+                } else {
+                    visual.roll = roll
+                }
+            }
 
             if visual.marked {
                 let pulse = 0.75 + Float(sin(elapsed * 6)) * 0.35
