@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>VOIDSTACK</title>
+<meta name="description" content="VOIDSTACK — ein neonfarbenes 3D-Würfel-Eliminierungs-Puzzle im Browser." />
+<meta name="theme-color" content="#05030f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="VOIDSTACK" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./icons/icon-180.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+<link rel="stylesheet" href="./css/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud">
+    <div id="hud-top">
+      <div class="stat"><span class="label">SCORE</span><span id="score" class="value">0</span></div>
+      <div class="stat"><span class="label">LEVEL</span><span id="level" class="value">1</span></div>
+      <div class="stat"><span class="label">COMBO</span><span id="combo" class="value">×0</span></div>
+      <div id="lives"></div>
+    </div>
+    <div id="warning" class="hidden">GEFAHR</div>
+  </div>
+
+  <div id="start-screen" class="overlay">
+    <h1 class="logo">VOID<span>STACK</span></h1>
+    <p class="tagline">Schiebe die markierten Stapel ins Nichts, bevor sie dich erreichen.</p>
+    <button id="btn-start" class="btn-primary">START</button>
+    <button id="btn-howto" class="btn-secondary">SPIELREGELN</button>
+    <p class="hint">Tastatur: ←/→ wählen · Leertaste schieben — Touch: tippen zum Wählen, nach oben wischen zum Schieben</p>
+    <p class="credits">Original-Spielkonzept &amp; Umsetzung · keine Verbindung zu Sony oder Kurushi™/Intelligent Qube™</p>
+  </div>
+
+  <div id="howto-screen" class="overlay hidden">
+    <h2>Spielregeln</h2>
+    <ul>
+      <li><strong class="c-marked">Rote, pulsierende</strong> Stapel musst du wegschieben, bevor sie die vordere Kante erreichen.</li>
+      <li><strong class="c-safe">Blaue</strong> Stapel darfst du <em>nicht</em> wegschieben — lass sie einfach vorbeiziehen.</li>
+      <li>Ein falsch geschobener blauer Stapel oder ein rot erreichtes Vorderfeld kostet ein Leben.</li>
+      <li>Ketten aus mehreren markierten Stapeln in Folge geben Combo-Bonus.</li>
+      <li>Mit steigendem Level wird das Tempo höher.</li>
+    </ul>
+    <button id="btn-back" class="btn-secondary">ZURÜCK</button>
+  </div>
+
+  <div id="pause-screen" class="overlay hidden">
+    <h2>PAUSE</h2>
+    <button id="btn-resume" class="btn-primary">WEITER</button>
+    <button id="btn-quit" class="btn-secondary">HAUPTMENÜ</button>
+  </div>
+
+  <div id="gameover-screen" class="overlay hidden">
+    <h2>GAME OVER</h2>
+    <p id="final-score" class="final-score">0</p>
+    <p class="final-label">PUNKTE</p>
+    <button id="btn-retry" class="btn-primary">NOCHMAL</button>
+    <button id="btn-menu" class="btn-secondary">HAUPTMENÜ</button>
+  </div>
+
+  <button id="btn-pause" class="icon-btn hidden" aria-label="Pause">❚❚</button>
+
+  <div id="touch-controls" class="hidden">
+    <button id="touch-left" class="touch-btn" aria-label="Links">◀</button>
+    <button id="touch-push" class="touch-btn touch-push" aria-label="Schieben">PUSH</button>
+    <button id="touch-right" class="touch-btn" aria-label="Rechts">▶</button>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
